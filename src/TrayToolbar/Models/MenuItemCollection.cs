@@ -1,4 +1,8 @@
-﻿using System.Collections.ObjectModel;
+﻿using Microsoft.Win32;
+using System.Collections.ObjectModel;
+using System.Drawing;
+using System.Runtime.InteropServices;
+using System.Text;
 using TrayToolbar.Extensions;
 
 namespace TrayToolbar.Models
@@ -7,6 +11,8 @@ namespace TrayToolbar.Models
     {
         public MenuItemCollection() { }
         public bool NeedsRefresh { get; set; } = true;
+        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+        public static extern int SHLoadIndirectString(string pszSource, StringBuilder pszOutBuf, int cchOutBuf, string ppvReserved);
 
         public ToolStripMenuItem? CreateFolder(string path, string target, TrayToolbarConfiguration configuration, ToolStripItemClickedEventHandler clickHandler, MouseEventHandler mouseDownHandler)
         {
@@ -102,7 +108,30 @@ namespace TrayToolbar.Models
                 submenu = CreateFolder(relativePath, parentPath, configuration, clickHandler, mouseDownHandler);
             }
             var menuText = Path.GetFileName(file);
-            if (configuration.HideFileExtensions || file.FileExtension().IsOneOf(".lnk", ".url"))
+            if (configuration.HideFileExtensions || file.FileExtension().IsOneOf(".lnk"))
+            {
+
+                menuText = "";
+                var lnkfile = Lnk.Lnk.LoadFile(file);
+                if ((lnkfile.TargetIDs.Count == 1) && (lnkfile.TargetIDs[0].GetType().ToString() == "Lnk.ShellItems.ShellBag0X1F"))
+                {
+                    var mui_string = lnkfile.TargetIDs[0].Value;
+                    if (mui_string[0] != '@' && lnkfile.Header.DataFlags.HasFlag(Lnk.Header.DataFlag.HasName))
+                        mui_string = lnkfile.Name;
+                    if (mui_string[0] == '@')
+                    {
+                        StringBuilder lptStr = new StringBuilder(1024);
+                        //LSTATUS t_status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Classes\\CLSID\\{52205fd8-5dfb-447d-801a-d0b52f2e83e1}", 0, KEY_READ, &hKey);
+                        //t_status = RegLoadMUIString(hKey, L"", lptStr, 1024, &t_size, 0, NULL);
+                        //RegCloseKey(hKey);
+                        if (SHLoadIndirectString(mui_string, lptStr, 1024, null) == 0)
+                            menuText = lptStr.ToString();
+                    }
+                }
+                if (menuText.Length == 0)
+                    menuText = Path.GetFileNameWithoutExtension(file);
+            }
+            if (configuration.HideFileExtensions || file.FileExtension().IsOneOf(".url"))
             {
                 menuText = Path.GetFileNameWithoutExtension(file);
             }
